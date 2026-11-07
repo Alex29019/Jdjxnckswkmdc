@@ -2,6 +2,8 @@ import logging
 import os
 import asyncio
 
+from aiohttp import web
+
 from telegram import Update
 from telegram.constants import ChatType
 from telegram.ext import (
@@ -117,7 +119,27 @@ async def _shutdown(app: Application):
     os._exit(0)  # жёсткий выход, без ожидания graceful-стопа
 
 
+async def _health(request):
+    return web.Response(text="ok")
+
+
+async def _start_health_server():
+    # Render (Web Service) требует открытый порт — без него он считает
+    # процесс неживым и поднимает рядом второй, который конфликтует
+    # с первым за getUpdates. Этот сервер только для health-check.
+    port = int(os.environ.get("PORT", 10000))
+    web_app = web.Application()
+    web_app.router.add_get("/", _health)
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    log.info("health server listening on port %s", port)
+
+
 async def run():
+    await _start_health_server()
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", cmd_start))
