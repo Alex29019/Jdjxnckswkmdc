@@ -114,12 +114,10 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def _shutdown(app: Application):
     await asyncio.sleep(0.5)  # дать апдейту долистать до конца
-    await app.stop()
-    await app.shutdown()
-    os._exit(0)
+    os._exit(0)  # жёсткий выход, без ожидания graceful-стопа
 
 
-def main():
+async def run():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", cmd_start))
@@ -127,8 +125,20 @@ def main():
         MessageHandler(filters.TEXT & ~filters.COMMAND, on_private_text)
     )
 
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(
+        allowed_updates=Update.ALL_TYPES, drop_pending_updates=True
+    )
+
     log.info("bot started, owner_id=%s", OWNER_ID)
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+
+    # держим процесс живым вечно; реальный выход — os._exit(0) из _shutdown()
+    await asyncio.Event().wait()
+
+
+def main():
+    asyncio.run(run())
 
 
 if __name__ == "__main__":
